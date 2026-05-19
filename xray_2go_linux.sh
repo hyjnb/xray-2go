@@ -265,14 +265,13 @@ manage_packages() {
             fi
             yellow "正在安装 ${package}..."
             if command -v apt &>/dev/null; then
-                DEBIAN_FRONTEND=noninteractive apt install -y "$package"
+                DEBIAN_FRONTEND=noninteractive apt-get update -y && apt install -y "$package"
             elif command -v dnf &>/dev/null; then
-                dnf install -y "$package"
+                dnf update -y && dnf install -y "$package"
             elif command -v yum &>/dev/null; then
-                yum install -y "$package"
+                yum update -y && yum install -y "$package"
             elif command -v apk &>/dev/null; then
-                apk update
-                apk add "$package"
+                apk update && apk add "$package"
             else
                 red "Unknown system!"
                 return 1
@@ -871,7 +870,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 NoNewPrivileges=yes
-ExecStart=$work_dir/xray run -c $config_dir
+ExecStart=$work_dir/xray -c $config_dir
 Restart=on-failure
 RestartPreventExitStatus=23
 
@@ -922,7 +921,7 @@ alpine_openrc_services() {
 
 description="Xray service"
 command="/etc/xray/xray"
-command_args="run -c /etc/xray/config.json"
+command_args="-c /etc/xray/config.json"
 command_background=true
 pidfile="/var/run/xray.pid"
 EOF
