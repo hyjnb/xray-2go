@@ -85,23 +85,23 @@
 
 **一键安装：**
 ```bash
-bash <(curl -Ls https://github.com/gagmm/xray-2go/raw/main/xray_2go_linux.sh)
+bash <(curl -Ls https://github.com/hyjnb/xray-2go/raw/main/xray_2go_linux.sh)
 ```
 
 **带变量安装（可选）：**
 ```bash
-PORT=8888 CFIP=www.visa.com.tw CFPORT=8443 bash <(curl -Ls https://github.com/gagmm/xray-2go/raw/main/xray_2go_linux.sh)
+PORT=8888 CFIP=www.visa.com.tw CFPORT=8443 bash <(curl -Ls https://github.com/hyjnb/xray-2go/raw/main/xray_2go_linux.sh)
 ```
 
 **仅启用/检查 BBR + fq：**
 ```bash
-bash <(curl -Ls https://github.com/gagmm/xray-2go/raw/main/xray_2go_linux.sh) bbr
+bash <(curl -Ls https://github.com/hyjnb/xray-2go/raw/main/xray_2go_linux.sh) bbr
 ```
 
 ### macOS
 
 ```bash
-curl -Ls https://github.com/gagmm/xray-2go/raw/main/xray_2go_macos.sh -o xray_2go_macos.sh
+curl -Ls https://github.com/hyjnb/xray-2go/raw/main/xray_2go_macos.sh -o xray_2go_macos.sh
 chmod +x xray_2go_macos.sh
 sudo bash xray_2go_macos.sh
 ```
@@ -111,7 +111,7 @@ sudo bash xray_2go_macos.sh
 以 **管理员身份** 打开 PowerShell，执行：
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
-irm https://github.com/gagmm/xray-2go/raw/main/xray_2go_win.ps1 -OutFile xray_2go_win.ps1
+irm https://github.com/hyjnb/xray-2go/raw/main/xray_2go_win.ps1 -OutFile xray_2go_win.ps1
 .\xray_2go_win.ps1
 ```
 
@@ -146,7 +146,7 @@ irm https://github.com/gagmm/xray-2go/raw/main/xray_2go_win.ps1 -OutFile xray_2g
 
 安装/导出节点后，若检测到 PostgreSQL 环境变量，脚本会自动把 `xray2go_links_latest.txt` 写入 `public.xray_node_configs.links`。上传失败不会中断安装。
 
-Linux 默认下载 `gagmm/Xray-core` 的 pgstats 版核心；设置 `PGSTATS_DSN` 后会启用 `xray_http_captures`，新版核心会记录明文 HTTP 的 method/host/path/header 以及请求 body 预览字段：`body`、`body_size`、`body_truncated`、`body_base64`。同一 keep-alive 连接里的多个 HTTP/1.x 请求也会记录；HTTPS 内容不会被解密。
+Linux 默认下载 `hyjnb/Xray-core` 的 pgstats 版核心；设置 `PGSTATS_DSN` 后会启用 `xray_http_captures`，新版核心会记录明文 HTTP 的 method/host/path/header 以及请求 body 预览字段：`body`、`body_size`、`body_truncated`、`body_base64`。同一 keep-alive 连接里的多个 HTTP/1.x 请求也会记录；HTTPS 内容不会被解密。
 
 Linux/Windows 可选启用 RealiTLScanner 自动扫描 REALITY 伪装目标；macOS 因官方暂无发布二进制，需通过 `REALITY_SCAN_BIN` 指向自备可执行文件才会扫描。扫描成功后会把扫描到的 `IP:443` 用作 REALITY 回落目标，把可用域名用作 SNI；扫描失败、超时或未启用时，会自动回退到内置域名 `www.iij.ad.jp` / `www.nazhumi.com`。RealiTLScanner 官方说明建议优先在本地运行，云服务器上大范围扫描可能让 VPS 被标记，因此脚本默认不自动扫描。
 

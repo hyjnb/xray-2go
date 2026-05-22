@@ -697,8 +697,8 @@ install_xray() {
 
     # 下载xray,cloudflared
     [ ! -d "${work_dir}" ] && mkdir -p "${work_dir}" && chmod 777 "${work_dir}"
-    # 使用 gagmm/Xray-core fork（包含 pgstats 观测插件）。要回退到上游，请把下一行改成 XTLS/Xray-core/releases/latest。
-    XRAY_RELEASE_REPO="${XRAY_RELEASE_REPO:-gagmm/Xray-core}"
+    # 使用 hyjnb/Xray-core fork（包含 pgstats 观测插件）。要回退到上游，请把下一行改成 XTLS/Xray-core/releases/latest。
+    XRAY_RELEASE_REPO="${XRAY_RELEASE_REPO:-hyjnb/Xray-core}"
     XRAY_RELEASE_TAG="${XRAY_RELEASE_TAG:-v26.4.25-pgstats4}"
     curl -sLo "${work_dir}/${server_name}.zip" "https://github.com/${XRAY_RELEASE_REPO}/releases/download/${XRAY_RELEASE_TAG}/Xray-linux-${ARCH_ARG}.zip"
     curl -sLo "${work_dir}/qrencode" "https://github.com/eooce/test/releases/download/${ARCH}/qrencode-linux-${ARCH}"

@@ -1476,7 +1476,7 @@ create_shortcut() {
     mkdir -p "${bin_dir}"
     cat > "${work_dir}/2go.sh" << 'EOF'
 #!/usr/bin/env bash
-bash <(curl -Ls https://github.com/gagmm/xray-2go/raw/main/xray_2go_macos.sh) "$@"
+bash <(curl -Ls https://github.com/hyjnb/xray-2go/raw/main/xray_2go_macos.sh) "$@"
 EOF
     chmod +x "${work_dir}/2go.sh"
 
