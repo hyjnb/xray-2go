@@ -500,7 +500,7 @@ install_xray() {
 
     # 下载 xray (macOS 版本)
     yellow "下载 Xray..."
-    curl -sLo "${work_dir}/${server_name}.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-macos-${ARCH_ARG}.zip"
+    curl -fsSLo "${work_dir}/${server_name}.zip" "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-macos-${ARCH_ARG}.zip"
     if [ $? -ne 0 ]; then
         red "Xray 下载失败"
         exit 1
@@ -508,7 +508,7 @@ install_xray() {
 
     # 下载 cloudflared
     yellow "下载 cloudflared..."
-    curl -sLo "/tmp/cloudflared.tgz" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-${ARCH}.tgz"
+    curl -fsSLo "/tmp/cloudflared.tgz" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-${ARCH}.tgz"
     if [ $? -eq 0 ]; then
         tar -xzf /tmp/cloudflared.tgz -C "${work_dir}/" 2>/dev/null
         if [ -f "${work_dir}/cloudflared" ]; then
@@ -517,11 +517,26 @@ install_xray() {
         rm -f /tmp/cloudflared.tgz
     else
         yellow "尝试备用下载方式..."
-        curl -sLo "${work_dir}/argo" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-${ARCH}"
+        curl -fsSLo "${work_dir}/argo" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-${ARCH}"
     fi
 
     # 解压 xray
-    unzip -o "${work_dir}/${server_name}.zip" -d "${work_dir}/" > /dev/null 2>&1
+    UNZIP=""
+    if command -v unzip &>/dev/null; then
+        UNZIP=unzip
+    elif [ -x /usr/bin/unzip ]; then
+        UNZIP=/usr/bin/unzip
+    else
+        red "unzip 命令不存在，无法解压 Xray 安装包。请先安装 unzip。"
+        exit 1
+    fi
+    if ! "$UNZIP" -o "${work_dir}/${server_name}.zip" -d "${work_dir}/" 2>/tmp/xray2go-unzip-err.log; then
+        red "解压 Xray 失败！错误信息："
+        cat /tmp/xray2go-unzip-err.log
+        red "你可以手动解压: unzip ${work_dir}/${server_name}.zip -d ${work_dir}/"
+        exit 1
+    fi
+    rm -f /tmp/xray2go-unzip-err.log
     chmod +x "${work_dir}/${server_name}" "${work_dir}/argo" 2>/dev/null
 
     # 解除 macOS quarantine
