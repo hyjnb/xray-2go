@@ -37,7 +37,14 @@ find_available_port() {
     local end_port=${2:-60000}
     local port
     for i in $(seq 1 50); do
-        port=$(jot -r 1 "$start_port" "$end_port")
+        # 兼容多种环境的随机端口生成：jot (macOS) > shuf > bash $RANDOM
+        if command -v jot &>/dev/null; then
+            port=$(jot -r 1 "$start_port" "$end_port")
+        elif command -v shuf &>/dev/null; then
+            port=$(shuf -i "$start_port"-"$end_port" -n 1)
+        else
+            port=$(( start_port + RANDOM % (end_port - start_port + 1) ))
+        fi
         if ! lsof -iTCP:"$port" -sTCP:LISTEN &>/dev/null; then
             echo "$port"
             return 0
