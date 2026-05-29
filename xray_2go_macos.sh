@@ -11,10 +11,10 @@ export PATH="$HOME/.xray/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 # 定义颜色
 re="\033[0m"
 red="\033[1;91m"
-green="\e[1;32m"
-yellow="\e[1;33m"
-purple="\e[1;35m"
-skyblue="\e[1;36m"
+green="\033[1;32m"
+yellow="\033[1;33m"
+purple="\033[1;35m"
+skyblue="\033[1;36m"
 red() { echo -e "\033[1;91m$1\033[0m"; }
 green() { echo -e "\033[1;32m$1\033[0m"; }
 yellow() { echo -e "\033[1;33m$1\033[0m"; }
@@ -29,6 +29,10 @@ bin_dir="${work_dir}/bin"
 config_dir="${work_dir}/config.json"
 client_dir="${work_dir}/url.txt"
 launchd_dir="$HOME/Library/LaunchAgents"
+# root 用户应使用 LaunchDaemons，否则 macOS 会报 warning
+if [ "$EUID" = "0" ]; then
+    launchd_dir="/Library/LaunchDaemons"
+fi
 export_dir="$(pwd)"
 
 # 自动查找可用端口
