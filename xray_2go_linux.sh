@@ -915,6 +915,7 @@ After=network.target
 Type=simple
 NoNewPrivileges=yes
 TimeoutStartSec=0
+Environment="TUNNEL_TRANSPORT_PROTOCOL=http2"
 ExecStart=/bin/sh -c '/etc/xray/argo $(. /etc/xray/ports.env 2>/dev/null; if [ "${ARGO_MODE:-quick}" = "fixed" ] && [ -n "${ARGO_TUNNEL_TOKEN:-}" ]; then echo "tunnel --no-autoupdate run --token ${ARGO_TUNNEL_TOKEN}"; else echo "tunnel --url http://localhost:${PORT} --no-autoupdate --edge-ip-version auto --protocol http2"; fi)'
 StandardOutput=append:/etc/xray/argo.log
 Restart=on-failure
@@ -959,6 +960,7 @@ EOF
 
 description="Cloudflare Tunnel"
 command="/bin/sh"
+export TUNNEL_TRANSPORT_PROTOCOL="http2"
 command_args="-c '. /etc/xray/ports.env 2>/dev/null; if [ \"${ARGO_MODE:-quick}\" = \"fixed\" ] && [ -n \"${ARGO_TUNNEL_TOKEN:-}\" ]; then /etc/xray/argo tunnel --no-autoupdate run --token \"${ARGO_TUNNEL_TOKEN}\" > /etc/xray/argo.log 2>&1; else /etc/xray/argo tunnel --url http://localhost:${PORT} --no-autoupdate --edge-ip-version auto --protocol http2 > /etc/xray/argo.log 2>&1; fi'"
 command_background=true
 pidfile="/var/run/tunnel.pid"
@@ -2057,17 +2059,17 @@ ingress:
   - service: http_status:404
 EOF
                 if [ -f /etc/alpine-release ]; then
-                    sed -i '/^command_args=/c\command_args="-c '\''/etc/xray/argo tunnel --edge-ip-version auto --config /etc/xray/tunnel.yml run 2>&1'\''"' /etc/init.d/tunnel
+                    sed -i '/^command_args=/c\command_args="-c '\''export TUNNEL_TRANSPORT_PROTOCOL=http2; /etc/xray/argo tunnel --edge-ip-version auto --config /etc/xray/tunnel.yml run 2>&1'\''"' /etc/init.d/tunnel
                 else
-                    sed -i '/^ExecStart=/c ExecStart=/bin/sh -c "/etc/xray/argo tunnel --edge-ip-version auto --config /etc/xray/tunnel.yml run 2>&1"' /etc/systemd/system/tunnel.service
+                    sed -i '/^ExecStart=/c ExecStart=/bin/sh -c "export TUNNEL_TRANSPORT_PROTOCOL=http2; /etc/xray/argo tunnel --edge-ip-version auto --config /etc/xray/tunnel.yml run 2>&1"' /etc/systemd/system/tunnel.service
                 fi
                 restart_argo
                 change_argo_domain
             elif [[ $argo_auth =~ ^[A-Z0-9a-z=]{120,250}$ ]]; then
                 if [ -f /etc/alpine-release ]; then
-                    sed -i "/^command_args=/c\command_args=\"-c '/etc/xray/argo tunnel --edge-ip-version auto --no-autoupdate --protocol http2 run --token $argo_auth 2>&1'\"" /etc/init.d/tunnel
+                    sed -i "/^command_args=/c\command_args=\"-c 'export TUNNEL_TRANSPORT_PROTOCOL=http2; /etc/xray/argo tunnel --edge-ip-version auto --no-autoupdate --protocol http2 run --token $argo_auth 2>&1'\"" /etc/init.d/tunnel
                 else
-                    sed -i '/^ExecStart=/c ExecStart=/bin/sh -c "/etc/xray/argo tunnel --edge-ip-version auto --no-autoupdate --protocol http2 run --token '$argo_auth' 2>&1"' /etc/systemd/system/tunnel.service
+                    sed -i '/^ExecStart=/c ExecStart=/bin/sh -c "export TUNNEL_TRANSPORT_PROTOCOL=http2; /etc/xray/argo tunnel --edge-ip-version auto --no-autoupdate --protocol http2 run --token '$argo_auth' 2>&1"' /etc/systemd/system/tunnel.service
                 fi
                 restart_argo
                 change_argo_domain
