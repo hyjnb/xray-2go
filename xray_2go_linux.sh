@@ -689,10 +689,10 @@ get_latest_xray_tag() {
         tag=$(curl -s --max-time 10 "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null | grep -oP '"tag_name"\s*:\s*"\K[^"]+' | head -1)
     fi
     if [ -z "$tag" ]; then
-        yellow "⚠ 无法通过 API 获取 ${repo} 最新版本，使用回退 tag: v1.0.0"
+        yellow "⚠ 无法通过 API 获取 ${repo} 最新版本，使用回退 tag: v1.0.0" >&2
         echo "v1.0.0"
     else
-        green "✓ 检测到 ${repo} 最新版本: ${tag}"
+        green "✓ 检测到 ${repo} 最新版本: ${tag}" >&2
         echo "$tag"
     fi
 }
