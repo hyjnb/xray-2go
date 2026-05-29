@@ -1290,6 +1290,7 @@ add_caddy_conf() {
     load_ports
     [ -f /etc/caddy/Caddyfile ] && cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak > /dev/null 2>&1
     rm -rf /etc/caddy/Caddyfile
+    mkdir -p /etc/caddy
     cat > /etc/caddy/Caddyfile << EOF
 {
     auto_https off
