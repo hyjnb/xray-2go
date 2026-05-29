@@ -279,7 +279,11 @@ manage_packages() {
             elif command -v apk &>/dev/null; then
                 apk update && apk add "$package"
             elif command -v pacman &>/dev/null; then
-                pacman -Sy --noconfirm "$package"
+                # 不用 -Sy 避免部分升级导致 GLIBC 不兼容；如果本地数据库为空请先 pacman -Syu
+                pacman -S --noconfirm --needed "$package" 2>/dev/null || {
+                    red "pacman 安装 ${package} 失败，请先运行 pacman -Syu 更新系统后重试"
+                    return 1
+                }
             else
                 red "Unknown system!"
                 return 1
@@ -299,7 +303,7 @@ manage_packages() {
             elif command -v apk &>/dev/null; then
                 apk del "$package"
             elif command -v pacman &>/dev/null; then
-                pacman -R --noconfirm "$package"
+                pacman -R --noconfirm "$package" 2>/dev/null || true
             else
                 red "Unknown system!"
                 return 1
