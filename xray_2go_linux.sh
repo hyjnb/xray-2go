@@ -676,6 +676,27 @@ EOF
 }
 
 # 下载并安装 xray,cloudflared
+# 通过 GitHub API 自动获取 hyjnb/Xray-core 最新 release tag
+# 可设置环境变量 XRAY_RELEASE_REPO / XRAY_RELEASE_TAG 覆盖
+# 用法: get_latest_xray_tag [repo]
+get_latest_xray_tag() {
+    local repo="${1:-hyjnb/Xray-core}"
+    local tag
+    # 优先用 jq（精确解析），没有则 fallback 到 grep+sed
+    if command -v jq &>/dev/null; then
+        tag=$(curl -s --max-time 10 "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null | jq -r '.tag_name // empty' 2>/dev/null)
+    else
+        tag=$(curl -s --max-time 10 "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null | grep -oP '"tag_name"\s*:\s*"\K[^"]+' | head -1)
+    fi
+    if [ -z "$tag" ]; then
+        yellow "⚠ 无法通过 API 获取 ${repo} 最新版本，使用回退 tag: v1.0.0"
+        echo "v1.0.0"
+    else
+        green "✓ 检测到 ${repo} 最新版本: ${tag}"
+        echo "$tag"
+    fi
+}
+
 install_xray() {
     clear
     purple "正在安装Xray-2go中，请稍等..."
@@ -699,8 +720,15 @@ install_xray() {
     [ ! -d "${work_dir}" ] && mkdir -p "${work_dir}" && chmod 777 "${work_dir}"
     # 使用 hyjnb/Xray-core fork（包含 pgstats 观测插件）。要回退到上游，请把下一行改成 XTLS/Xray-core/releases/latest。
     XRAY_RELEASE_REPO="${XRAY_RELEASE_REPO:-hyjnb/Xray-core}"
-    XRAY_RELEASE_TAG="${XRAY_RELEASE_TAG:-v26.4.25-pgstats4}"
-    curl -sLo "${work_dir}/${server_name}.zip" "https://github.com/${XRAY_RELEASE_REPO}/releases/download/${XRAY_RELEASE_TAG}/Xray-linux-${ARCH_ARG}.zip"
+    XRAY_RELEASE_TAG="${XRAY_RELEASE_TAG:-$(get_latest_xray_tag "$XRAY_RELEASE_REPO")}"
+    yellow "正在下载 Xray (${XRAY_RELEASE_REPO} @ ${XRAY_RELEASE_TAG})..."
+    if ! curl -L --max-time 60 -o "${work_dir}/${server_name}.zip" "https://github.com/${XRAY_RELEASE_REPO}/releases/download/${XRAY_RELEASE_TAG}/Xray-linux-${ARCH_ARG}.zip"; then
+        red "下载 Xray 失败! 请检查:"
+        red "  1. 网络是否能访问 GitHub"
+        red "  2. 仓库 ${XRAY_RELEASE_REPO} release tag ${XRAY_RELEASE_TAG} 是否存在"
+        red "  3. 可通过环境变量手动指定: XRAY_RELEASE_TAG=xxx bash ..."
+        exit 1
+    fi
     curl -sLo "${work_dir}/qrencode" "https://github.com/eooce/test/releases/download/${ARCH}/qrencode-linux-${ARCH}"
     curl -sLo "${work_dir}/argo" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${ARCH}"
     unzip "${work_dir}/${server_name}.zip" -d "${work_dir}/" > /dev/null 2>&1 && chmod +x ${work_dir}/${server_name} ${work_dir}/argo ${work_dir}/qrencode
