@@ -272,6 +272,8 @@ manage_packages() {
                 yum update -y && yum install -y "$package"
             elif command -v apk &>/dev/null; then
                 apk update && apk add "$package"
+            elif command -v pacman &>/dev/null; then
+                pacman -Sy --noconfirm "$package"
             else
                 red "Unknown system!"
                 return 1
@@ -290,6 +292,8 @@ manage_packages() {
                 yum remove -y "$package" && yum autoremove -y
             elif command -v apk &>/dev/null; then
                 apk del "$package"
+            elif command -v pacman &>/dev/null; then
+                pacman -R --noconfirm "$package"
             else
                 red "Unknown system!"
                 return 1
