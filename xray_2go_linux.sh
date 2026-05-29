@@ -803,6 +803,8 @@ REALITY_GRPC_TARGET=$REALITY_GRPC_TARGET
 REALITY_GRPC_SNI=$REALITY_GRPC_SNI
 REALITY_XHTTP_TARGET=$REALITY_XHTTP_TARGET
 REALITY_XHTTP_SNI=$REALITY_XHTTP_SNI
+# CF_FASTEST_DOMAIN 由 select_fastest_cf_domain 首次测速后写入
+CF_FASTEST_DOMAIN=""
 EOF
 
     # 生成配置文件
@@ -988,6 +990,53 @@ EOF
 }
 
 
+# ==========================================
+# CloudFlare 优选域名测速
+# 从预设列表中 TCP 连接测速，选出最快的作为节点地址
+# Argo 域名保留在 sni/host 字段用于隧道路由
+# ==========================================
+CF_PREFERRED_DOMAINS_DEFAULT="youxuan.cf.090227.xyz,www.visa.cn,time.is,icook.hk,www.shopify.com,store.ubi.com"
+
+tcping_ms() {
+    local domain="$1" port="${2:-443}" timeout_sec="${3:-3}"
+    local result
+    result=$(curl -s -o /dev/null -w '%{time_connect}' --connect-timeout "$timeout_sec" --max-time "$timeout_sec" "https://$domain:$port" 2>/dev/null)
+    if [ -z "$result" ] || [ "$result" = "0" ] || [ "$result" = "0.000" ] || [ "$result" = "0.000000" ]; then
+        echo "9999" && return 1
+    fi
+    awk "BEGIN {printf \"%d\", $result * 1000}" 2>/dev/null || echo "9999"
+}
+
+select_fastest_cf_domain() {
+    local domains="${1:-${CF_PREFERRED_DOMAINS:-$CF_PREFERRED_DOMAINS_DEFAULT}}"
+    local fastest_domain="" fastest_ms=99999 domain ms
+    local old_ifs="$IFS"
+    IFS=','
+    green "正在测速优选 CloudFlare 域名..." >&2
+    for domain in $domains; do
+        [ -z "$domain" ] && continue
+        ms=$(tcping_ms "$domain" 443 3)
+        if [ "$ms" != "9999" ] && [ "$ms" -lt "$fastest_ms" ]; then
+            fastest_ms=$ms
+            fastest_domain="$domain"
+            green "  ✓ $domain → ${ms}ms" >&2
+        else
+            yellow "  ✗ $domain → 超时" >&2
+        fi
+    done
+    IFS="$old_ifs"
+    if [ -n "$fastest_domain" ]; then
+        green "最快优选域名: ${purple}${fastest_domain}${re} (${fastest_ms}ms)" >&2
+        echo "$fastest_domain"
+        # 缓存到 ports.env 避免每次查看节点都测速
+        sed -i '/^CF_FASTEST_DOMAIN=/d' "${work_dir}/ports.env" 2>/dev/null
+        echo "CF_FASTEST_DOMAIN=$fastest_domain" >> "${work_dir}/ports.env"
+    else
+        yellow "所有优选域名均超时，回退到 Argo 域名" >&2
+        echo ""
+    fi
+}
+
 get_info() {
     clear
     load_ports
@@ -1021,7 +1070,12 @@ get_info() {
 
     green "\nArgoDomain：${purple}$argodomain${re}\n"
 
-    argo_add="${XRAY2GO_ARGO_ADD:-$argodomain}"
+    # 优选域名测速：初次安装时测速并缓存，后续直接使用缓存
+    if [ -z "${CF_FASTEST_DOMAIN:-}" ] && [ -n "$argodomain" ] && [ "$argodomain" != "获取失败请重试" ]; then
+        CF_FASTEST_DOMAIN=$(select_fastest_cf_domain)
+        load_ports  # 重新加载确保写入了
+    fi
+    argo_add="${XRAY2GO_ARGO_ADD:-${CF_FASTEST_DOMAIN:-$argodomain}}"
     if [ "${XRAY2GO_ARGO_ONLY:-0}" = "1" ]; then
         cat > ${work_dir}/url.txt <<EOF
 vless://${UUID}@${argo_add}:${CFPORT}?encryption=none&security=tls&sni=${argodomain}&fp=chrome&type=ws&host=${argodomain}&path=%2Fvless-argo%3Fed%3D2560#${isp}-vless-argo-fixed
