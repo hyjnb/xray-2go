@@ -45,15 +45,21 @@ find_available_port() {
     local start_port=${1:-1000}
     local end_port=${2:-60000}
     local port
-    for i in $(seq 1 50); do
-        port=$(shuf -i "$start_port"-"$end_port" -n 1)
+    for i in $(seq 1 50 2>/dev/null || jot - 1 50 2>/dev/null || { j=1; while [ $j -le 50 ]; do echo $j; j=$((j+1)); done; }); do
+        # 随机端口: 优先 shuf，不兼容则用 bash $RANDOM
+        if port=$(shuf -i "$start_port"-"$end_port" -n 1 2>/dev/null); then
+            :
+        else
+            port=$(( start_port + RANDOM % (end_port - start_port + 1) ))
+        fi
         if ! lsof -iTCP:"$port" -sTCP:LISTEN &>/dev/null 2>&1 && ! ss -tlnp 2>/dev/null | grep -q ":$port "; then
             echo "$port"
             return 0
         fi
     done
-    # fallback
-    shuf -i "$start_port"-"$end_port" -n 1
+    # fallback: try shuf once more, else $RANDOM
+    port=$(shuf -i "$start_port"-"$end_port" -n 1 2>/dev/null || echo $(( start_port + RANDOM % (end_port - start_port + 1) )))
+    echo "$port"
 }
 
 # 自动分配所有端口
