@@ -1863,7 +1863,11 @@ case "${choice}" in
         for vmess_url in $vmess_urls; do
             encoded_vmess="${vmess_url#"$vmess_prefix"}"
             decoded_vmess=$(echo "$encoded_vmess" | base64 --decode)
-            updated_vmess=$(echo "$decoded_vmess" | jq --arg new_uuid "$new_uuid" '.id = $new_uuid')
+            if command -v jq &>/dev/null; then
+                updated_vmess=$(echo "$decoded_vmess" | jq --arg new_uuid "$new_uuid" '.id = $new_uuid')
+            else
+                updated_vmess=$(echo "$decoded_vmess" | sed "s/\"id\": *\"[^\"]*\"/\"id\": \"$new_uuid\"/")
+            fi
             encoded_updated_vmess=$(echo "$updated_vmess" | base64 | tr -d '\n')
             new_vmess_url="$vmess_prefix$encoded_updated_vmess"
             content=$(echo "$content" | sed "s|$vmess_url|$new_vmess_url|")
@@ -1926,7 +1930,11 @@ case "${choice}" in
             else
                 new_sni="$new_sni"
             fi
-            jq --arg new_sni "$new_sni" '.inbounds[5].streamSettings.realitySettings.dest = ($new_sni + ":443") | .inbounds[5].streamSettings.realitySettings.serverNames = [$new_sni]' /etc/xray/config.json > /etc/xray/config.json.tmp && mv /etc/xray/config.json.tmp /etc/xray/config.json
+            if command -v jq &>/dev/null; then
+                jq --arg new_sni "$new_sni" '.inbounds[5].streamSettings.realitySettings.dest = ($new_sni + ":443") | .inbounds[5].streamSettings.realitySettings.serverNames = [$new_sni]' /etc/xray/config.json > /etc/xray/config.json.tmp && mv /etc/xray/config.json.tmp /etc/xray/config.json
+            else
+                yellow "jq 未安装，跳过 config.json SNI 修改，仅更新 URL 中的 SNI"
+            fi
             restart_xray
             sed -i "1s/\(vless:\/\/[^\?]*\?\([^\&]*\&\)*sni=\)[^&]*/\1$new_sni/" $client_dir
             sed -i "1s/\(vless:\/\/[^\?]*\?\([^\&]*\&\)*authority=\)[^&]*/\1$new_sni/" $client_dir
@@ -2172,7 +2180,11 @@ change_argo_domain() {
     for vmess_url in $vmess_urls; do
         encoded_vmess="${vmess_url#"$vmess_prefix"}"
         decoded_vmess=$(echo "$encoded_vmess" | base64 --decode)
-        updated_vmess=$(echo "$decoded_vmess" | jq --arg new_domain "$ArgoDomain" '.host = $new_domain | .sni = $new_domain')
+        if command -v jq &>/dev/null; then
+            updated_vmess=$(echo "$decoded_vmess" | jq --arg new_domain "$ArgoDomain" '.host = $new_domain | .sni = $new_domain')
+        else
+            updated_vmess=$(echo "$decoded_vmess" | sed "s/\"host\": *\"[^\"]*\"/\"host\": \"$ArgoDomain\"/g; s/\"sni\": *\"[^\"]*\"/\"sni\": \"$ArgoDomain\"/g")
+        fi
         encoded_updated_vmess=$(echo "$updated_vmess" | base64 | tr -d '\n')
         new_vmess_url="$vmess_prefix$encoded_updated_vmess"
         content=$(echo "$content" | sed "s|$vmess_url|$new_vmess_url|")
