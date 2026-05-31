@@ -961,6 +961,76 @@ function Get-CaddyInfo {
 
 
 # ==========================================
+# CloudFlare 优选域名测速
+# 从预设列表中 TCP 连接测速，选出最快的作为节点地址
+# ==========================================
+$script:CF_PREFERRED_DOMAINS_DEFAULT = "cloudflare.182682.xyz,cdn.2020111.xyz,cfip.cfcdn.vip,cf.0sm.com,cf.090227.xyz,115155.xyz,cdn.tzpro.xyz,cf.877771.xyz,cfip.1323123.xyz,cfip.xxxxxxxx.tk,cloudflare-ip.mofashi.ltd,cnamefuckxxs.yuchen.icu,freeyx.cloudflare88.eu.org,xn--b6gac.eu.org,youxuan.cf.090227.xyz,www.visa.cn,time.is,icook.hk,www.shopify.com,store.ubi.com"
+$script:CF_FASTEST_DOMAIN = ''
+
+# DNS 活性检测
+function Test-DnsAlive {
+    param([string]$Domain)
+    try {
+        $dns = Resolve-DnsName -Name $Domain -Type A -ErrorAction Stop | Where-Object { $_.Type -eq 'A' } | Select-Object -First 1
+        return [bool]$dns
+    } catch { return $false }
+}
+
+# TCP 连接测速 (ms)
+function Get-TcpingMs {
+    param([string]$Domain, [int]$Port = 443, [int]$TimeoutSec = 3)
+    try {
+        $uri = "https://${Domain}:${Port}"
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $req = [System.Net.HttpWebRequest]::Create($uri)
+        $req.Method = 'HEAD'
+        $req.Timeout = $TimeoutSec * 1000
+        $req.AllowAutoRedirect = $false
+        $req.UserAgent = 'Mozilla/5.0'
+        try { $resp = $req.GetResponse(); $resp.Close() } catch {}
+        $sw.Stop()
+        return [int]$sw.ElapsedMilliseconds
+    } catch { return 9999 }
+}
+
+function Select-FastestCfDomain {
+    param([string]$Domains = '')
+    if ([string]::IsNullOrWhiteSpace($Domains)) {
+        $Domains = if ($env:CF_PREFERRED_DOMAINS) { $env:CF_PREFERRED_DOMAINS } else { $script:CF_PREFERRED_DOMAINS_DEFAULT }
+    }
+
+    $domainList = $Domains -split ','
+    Write-Green "正在测速优选 CloudFlare 域名（含 DNS 活性检测）..."
+    $fastestDomain = ''; $fastestMs = 99999
+    foreach ($d in $domainList) {
+        $d = $d.Trim()
+        if ([string]::IsNullOrWhiteSpace($d)) { continue }
+        # 先做 DNS 活性检测
+        if (-not (Test-DnsAlive -Domain $d)) {
+            Write-Yellow "  ✗ $d → DNS 无解析，跳过"
+            continue
+        }
+        $ms = Get-TcpingMs -Domain $d -Port 443 -TimeoutSec 3
+        if ($ms -lt $fastestMs) {
+            $fastestMs = $ms
+            $fastestDomain = $d
+            Write-Green "  ✓ $d → ${ms}ms"
+        } else {
+            Write-Yellow "  ✗ $d → 超时"
+        }
+    }
+    if ($fastestDomain) {
+        Write-Green "最快优选域名: $fastestDomain (${fastestMs}ms)"
+        $script:CF_FASTEST_DOMAIN = $fastestDomain
+        return $fastestDomain
+    } else {
+        Write-Yellow "所有优选域名均超时，回退到 Argo 域名"
+        return ''
+    }
+}
+
+# ==========================================
 # 获取信息并生成节点
 # ==========================================
 function Get-Info {
@@ -1001,7 +1071,11 @@ function Get-Info {
 
     Write-Green "`nArgoDomain: $argodomain`n"
 
-    $argoAdd = $argodomain
+    # 优选域名测速：初次安装时测速并缓存，后续直接使用缓存
+    if ([string]::IsNullOrWhiteSpace($script:CF_FASTEST_DOMAIN) -and $argodomain -and $argodomain -ne 'failed.trycloudflare.com') {
+        $script:CF_FASTEST_DOMAIN = Select-FastestCfDomain
+    }
+    $argoAdd = if ($script:CF_FASTEST_DOMAIN) { $script:CF_FASTEST_DOMAIN } else { $argodomain }
     if ($env:XRAY2GO_ARGO_ADD) { $argoAdd = $env:XRAY2GO_ARGO_ADD }
 
     # VMess JSON
@@ -1660,7 +1734,8 @@ function Manage-ArgoMenu {
     Write-Green '3. 添加Argo固定隧道'
     Write-Green '4. 切换回Argo临时隧道'
     Write-Green '5. 重新获取Argo临时域名'
-    Write-Purple '6. 返回主菜单'
+    Write-Green '6. 重新测速CF优选域名'
+    Write-Purple '7. 返回主菜单'
 
     $choice = Read-Host '请输入选择'
     switch ($choice) {
@@ -1703,7 +1778,20 @@ function Manage-ArgoMenu {
             Get-QuickTunnel
             Update-ArgoDomain
         }
-        '6' { return }
+        '6' {
+            Clear-Host
+            Write-Green '正在重新测速 CF 优选域名...'
+            $script:CF_FASTEST_DOMAIN = Select-FastestCfDomain
+            if ($script:CF_FASTEST_DOMAIN) {
+                Write-Green "`n测速完成，最快优选域名: $($script:CF_FASTEST_DOMAIN)"
+                Write-Green '更新节点信息中...'
+                Load-Ports
+                Get-Info
+            } else {
+                Write-Yellow "`n所有优选域名均不可用，将使用 Argo 域名作为回退"
+            }
+        }
+        '7' { return }
         default { Write-Red '无效选项' }
     }
 }

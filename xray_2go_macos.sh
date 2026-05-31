@@ -876,6 +876,72 @@ macos_caddy_launchd() {
 EOF
 }
 
+# ==========================================
+# CloudFlare 优选域名测速
+# 从预设列表中 TCP 连接测速，选出最快的作为节点地址
+# Argo 域名保留在 sni/host 字段用于隧道路由
+# ==========================================
+CF_PREFERRED_DOMAINS_DEFAULT="cloudflare.182682.xyz,cdn.2020111.xyz,cfip.cfcdn.vip,cf.0sm.com,cf.090227.xyz,115155.xyz,cdn.tzpro.xyz,cf.877771.xyz,cfip.1323123.xyz,cfip.xxxxxxxx.tk,cloudflare-ip.mofashi.ltd,cnamefuckxxs.yuchen.icu,freeyx.cloudflare88.eu.org,xn--b6gac.eu.org,youxuan.cf.090227.xyz,www.visa.cn,time.is,icook.hk,www.shopify.com,store.ubi.com"
+
+# ==========================================
+# DNS 活性检测：检查域名是否有 A 记录解析
+# 返回 0 = 存活，1 = 失效
+# ==========================================
+dns_alive_check() {
+    local domain="$1"
+    local ip
+    ip=$(dig +short "$domain" A 2>/dev/null | grep -E '^[0-9]+\.' | head -1)
+    [ -n "$ip" ]
+}
+
+tcping_ms() {
+    local domain="$1" port="${2:-443}" timeout_sec="${3:-3}"
+    local result
+    result=$(curl -s -o /dev/null -w '%{time_connect}' --connect-timeout "$timeout_sec" --max-time "$timeout_sec" "https://$domain:$port" 2>/dev/null)
+    if [ -z "$result" ] || [ "$result" = "0" ] || [ "$result" = "0.000" ] || [ "$result" = "0.000000" ]; then
+        echo "9999" && return 1
+    fi
+    awk "BEGIN {printf \"%d\", $result * 1000}" 2>/dev/null || echo "9999"
+}
+
+select_fastest_cf_domain() {
+    local domains="${1:-${CF_PREFERRED_DOMAINS:-$CF_PREFERRED_DOMAINS_DEFAULT}}"
+    local fastest_domain="" fastest_ms=99999 domain ms
+    local old_ifs="$IFS"
+
+    IFS=','
+    green "正在测速优选 CloudFlare 域名（含 DNS 活性检测）..." >&2
+    for domain in $domains; do
+        [ -z "$domain" ] && continue
+        # 先做 DNS 活性检测，跳过无法解析的域名
+        if ! dns_alive_check "$domain"; then
+            yellow "  ✗ $domain → DNS 无解析，跳过" >&2
+            continue
+        fi
+        ms=$(tcping_ms "$domain" 443 3)
+        if [ "$ms" != "9999" ] && [ "$ms" -lt "$fastest_ms" ]; then
+            fastest_ms=$ms
+            fastest_domain="$domain"
+            green "  ✓ $domain → ${ms}ms" >&2
+        else
+            yellow "  ✗ $domain → 超时" >&2
+        fi
+    done
+    IFS="$old_ifs"
+    if [ -n "$fastest_domain" ]; then
+        green "最快优选域名: ${purple}${fastest_domain}${re} (${fastest_ms}ms)" >&2
+        echo "$fastest_domain"
+        # 缓存到 ports.env 避免每次查看节点都测速
+        sed -i '' '/^CF_FASTEST_DOMAIN=/d' "${work_dir}/ports.env" 2>/dev/null
+        echo "CF_FASTEST_DOMAIN=$fastest_domain" >> "${work_dir}/ports.env"
+    else
+        yellow "所有优选域名均超时，回退到 Argo 域名" >&2
+        echo ""
+    fi
+}
+
+CF_FASTEST_DOMAIN=""
+
 get_info() {
     clear
     load_ports
@@ -909,7 +975,12 @@ get_info() {
 
     green "\nArgoDomain：${purple}$argodomain${re}\n"
 
-    argo_add="${XRAY2GO_ARGO_ADD:-$argodomain}"
+    # 优选域名测速：初次安装时测速并缓存，后续直接使用缓存
+    if [ -z "${CF_FASTEST_DOMAIN:-}" ] && [ -n "$argodomain" ] && [ "$argodomain" != "获取失败请重试" ]; then
+        CF_FASTEST_DOMAIN=$(select_fastest_cf_domain)
+        load_ports  # 重新加载确保写入了
+    fi
+    argo_add="${XRAY2GO_ARGO_ADD:-${CF_FASTEST_DOMAIN:-$argodomain}}"
     if [ "${XRAY2GO_ARGO_ONLY:-0}" = "1" ]; then
         cat > ${work_dir}/url.txt <<EOF
 vless://${UUID}@${argo_add}:${CFPORT}?encryption=none&security=tls&sni=${argodomain}&fp=chrome&type=ws&host=${argodomain}&path=%2Fvless-argo%3Fed%3D2560#${isp}-vless-argo-fixed
@@ -1792,7 +1863,9 @@ manage_argo() {
     skyblue "------------------"
     green "5. 重新获取Argo临时域名"
     skyblue "-------------------"
-    purple "6. 返回主菜单"
+    green "6. 重新测速CF优选域名"
+    skyblue "--------------------"
+    purple "7. 返回主菜单"
     skyblue "-----------"
     reading "\n请输入选择: " choice
     case "${choice}" in
@@ -1905,7 +1978,20 @@ PEOF
                 change_argo_domain
             fi
             ;;
-        6) menu ;;
+        6)
+            clear
+            green "正在重新测速 CF 优选域名..."
+            CF_FASTEST_DOMAIN=$(select_fastest_cf_domain)
+            if [ -n "$CF_FASTEST_DOMAIN" ]; then
+                green "\n测速完成，最快优选域名: ${purple}${CF_FASTEST_DOMAIN}${re}"
+                green "更新节点信息中..."
+                load_ports
+                get_info
+            else
+                yellow "\n所有优选域名均不可用，将使用 Argo 域名作为回退"
+            fi
+            ;;
+        7) menu ;;
         *) red "无效的选项！" ;;
     esac
 }
